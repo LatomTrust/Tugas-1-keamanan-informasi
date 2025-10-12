@@ -1,0 +1,1 @@
+Python DES implementation: use `python3 cli.py` as shown in root README.
