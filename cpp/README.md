@@ -1,0 +1,1 @@
+C++ DES implementation. Build with `make` then run `./des_cli ...` as shown in root README.
