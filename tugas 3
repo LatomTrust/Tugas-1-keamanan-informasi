@@ -1,0 +1,91 @@
+"""
+Public Key Distribution of Secret Keys + DES Communication Demo
+
+A and B initially do NOT share secret keys.
+They each generate RSA keypairs for exchanging DES session keys securely.
+
+Flow:
+1. A generates RSA keypair
+2. B generates RSA keypair
+3. A wants to communicate: generates DES key KA
+   -> A encrypts KA with B's RSA public key -> sends to B
+   -> B decrypts KA with own RSA private key
+4. B wants to reply: generates DES key KB
+   -> B encrypts KB with A's RSA public key -> sends to A
+   -> A decrypts KB with own RSA private key
+
+After that, A->B uses KA (DES), and B->A uses KB (DES)
+
+Dependencies: pycryptodome
+"""
+from Crypto.Cipher import DES, PKCS1_OAEP
+from Crypto.PublicKey import RSA
+from Crypto.Random import get_random_bytes
+
+# ---------------- RSA KEY GENERATION ----------------
+def generate_rsa_pair():
+    key = RSA.generate(2048)
+    return key, key.publickey()
+
+A_private, A_public = generate_rsa_pair()
+B_private, B_public = generate_rsa_pair()
+
+# ------------- DISTRIBUTE SECRET KEYS --------------
+def distribute_des_key(sender_private, receiver_public):
+    des_key = get_random_bytes(8)  # DES uses 56-bit key (8 bytes)
+    cipher_rsa = PKCS1_OAEP.new(receiver_public)
+    encrypted_key = cipher_rsa.encrypt(des_key)
+    return des_key, encrypted_key
+
+# A -> B: A sends KA
+KA, enc_KA = distribute_des_key(A_private, B_public)
+# B decrypts KA
+cipher_rsa_B = PKCS1_OAEP.new(B_private)
+KA_decrypted = cipher_rsa_B.decrypt(enc_KA)
+
+# B -> A: B sends KB
+KB, enc_KB = distribute_des_key(B_private, A_public)
+cipher_rsa_A = PKCS1_OAEP.new(A_private)
+KB_decrypted = cipher_rsa_A.decrypt(enc_KB)
+
+# ---------------- DES COMMUNICATION ----------------
+def des_encrypt(key, plaintext: bytes):
+    cipher = DES.new(key, DES.MODE_ECB)
+    pad_len = 8 - (len(plaintext) % 8)
+    plaintext += bytes([pad_len]) * pad_len
+    return cipher.encrypt(plaintext)
+
+def des_decrypt(key, ciphertext: bytes):
+    cipher = DES.new(key, DES.MODE_ECB)
+    decrypted = cipher.decrypt(ciphertext)
+    pad_len = decrypted[-1]
+    return decrypted[:-pad_len]
+
+# Example messages
+msg_A_to_B = b"Hello B, encrypted with KA!"
+msg_B_to_A = b"Hello A, encrypted with KB!"
+
+# Encrypt / decrypt using distributed keys
+cipher_AtoB = des_encrypt(KA_decrypted, msg_A_to_B)
+plain_AtoB = des_decrypt(KA_decrypted, cipher_AtoB)
+
+cipher_BtoA = des_encrypt(KB_decrypted, msg_B_to_A)
+plain_BtoA = des_decrypt(KB_decrypted, cipher_BtoA)
+
+# Output demonstration
+print("=== Public Key Distribution of Secret Keys ===")
+print()
+print("KA distributed A -> B")
+print("Original KA:", KA.hex())
+print("Recovered KA:", KA_decrypted.hex())
+print()
+print("KB distributed B -> A")
+print("Original KB:", KB.hex())
+print("Recovered KB:", KB_decrypted.hex())
+print()
+print("--- DES Communication ---")
+print("Ciphertext A->B:", cipher_AtoB.hex())
+print("Decrypted:", plain_AtoB)
+print()
+print("Ciphertext B->A:", cipher_BtoA.hex())
+print("Decrypted:", plain_BtoA)
